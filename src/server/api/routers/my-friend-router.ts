@@ -42,14 +42,16 @@ export const myFriendRouter = router({
         conn
           .selectFrom('users as friends')
           .innerJoin('friendships', 'friendships.friendUserId', 'friends.id')
-          .innerJoin(
-            userTotalFriendCount(conn).as('userTotalFriendCount'),
-            'userTotalFriendCount.userId',
+          .leftJoin(
+            mutualFriendCount(conn, input.friendUserId, ctx.session.userId).as(
+              'mutualFriendCount'
+            ),
+            'mutualFriendCount.userId',
             'friends.id'
           )
           .innerJoin(
-            mutualFriendCount(conn).as('mutualFriendCount'),
-            'mutualFriendCount.friendUserId',
+            userTotalFriendCount(conn).as('userTotalFriendCount'),
+            'userTotalFriendCount.userId',
             'friends.id'
           )
           .where('friendships.userId', '=', ctx.session.userId)
@@ -91,15 +93,16 @@ const userTotalFriendCount = (db: Database) => {
     .groupBy('friendships.userId')
 }
 
-const mutualFriendCount = (db: Database) => {
+const mutualFriendCount = (db: Database, user1Id: number, user2Id: number) => {
   return db
-    .selectFrom('friendships')
-    .where('friendships.status', '=', FriendshipStatusSchema.Values['accepted'])
+    .selectFrom('friendships as f1')
+    .innerJoin('friendships as f2', 'f1.friendUserId', 'f2.friendUserId')
+    .where('f1.status', '=', FriendshipStatusSchema.Values['accepted'])
+    .where('f2.status', '=', FriendshipStatusSchema.Values['accepted'])
+    .where('f1.userId', '=', user1Id)
+    .where('f2.userId', '=', user2Id)
     .select((eb) => [
-      'friendships.userId',
-      'friendships.friendUserId',
-      eb.fn.count('friendships.userId').as('mutualFriendCount'),
+      'f1.userId as userId',
+      eb.fn.countAll().as('mutualFriendCount'),
     ])
-    .groupBy('friendships.userId')
-    .groupBy('friendships.friendUserId')
 }
